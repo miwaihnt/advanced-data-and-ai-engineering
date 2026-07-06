@@ -28,9 +28,7 @@
   }
 }
 
-
 ```
-
 
 ### after
 
@@ -53,7 +51,6 @@
     "preferences.settings.notifications.email": True,
     "preferences.settings.notifications.push.alert": True
 }
-
 
 ```
 
