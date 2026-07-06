@@ -1,0 +1,5 @@
+{"log": "[INFO] Server started"}
+{"log": "[ERROR] DB connection failed"}
+{"log": "[WARN] High memory usage"}
+{"log": "[ERROR] Timeout exception"}
+{"log": "[ERROR] DB connection failed"}

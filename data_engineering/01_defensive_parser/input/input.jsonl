@@ -1,0 +1,7 @@
+{"sensor_id": "s1", "temperature": 22.5}
+{"sensor_id": "s2"}
+{"sensor_id": "s2"}
+{"sensor_id": "s3", "temperature": "25.0"}
+{"sensor_id": "s4", "temperature": "NaN"}
+invalid_json_string',
+{"sensor_id": "s5", "temperature": 18}

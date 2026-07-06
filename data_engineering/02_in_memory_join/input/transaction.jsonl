@@ -1,0 +1,4 @@
+{"user_id": "u1", "amount": 1000}
+{"user_id": "u2", "amount": 2000}
+{"user_id": "u1", "amount": 500}
+{"user_id": "u99", "amount": 3000} 
