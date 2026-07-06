@@ -56,7 +56,7 @@ graph TD
 
 ### 📘 【深掘り解説】自作ReAct（プロンプトベース）と商用Tool Calling（APIネイティブ）の違い
 
-実務や外資テックの実務では、本課題で実装した「プロンプトにツール仕様を書いて正規表現でパースするアプローチ（ReActの基本形）」と、OpenAIなどのAPIが提供する「ネイティブなTool Calling機能」の設計的な違いについて高い頻度で検証されます。
+実務では、本課題で実装した「プロンプトにツール仕様を書いて正規表現でパースするアプローチ（ReActの基本形）」と、OpenAIなどのAPIが提供する「ネイティブなTool Calling機能」の設計的な違いについて高い頻度で検証されます。
 
 | 比較項目 | 本課題の実装（プロンプトベース・ReAct） | 商用APIネイティブ（OpenAI Tool Calling等） |
 | :--- | :--- | :--- |
@@ -71,3 +71,107 @@ graph TD
 
 この低レイヤーのメカニズムをスクラッチで実装し理解しておくことで、LangChain等のフレームワークで「モデルが引数の型を間違える」「JSONが壊れてエラーになる」といった問題が起きた際に、プロンプトのスキーマ定義や型ガードをどう修正すべきか、ブラックボックスに頼らずピンポイントでデバッグできるようになります。
 
+---
+
+### 💡 OpenAI/Ollama API における「ネイティブなTool Calling」の実装例
+
+以下に、一般的な LLM API (OpenAI互換) における、ネイティブな Tool Calling（Function Calling）の具体的な実装手順とデータ構造を示します。
+
+---
+
+### 1. 【スキーマの定義】APIへの渡し方
+プロンプトに日本語でツールの説明を書く代わりに、APIの仕様に従って **`tools`** というリストを作成して、`client.chat.completions.create` に直接渡します。
+
+```python
+# APIに渡すためのツールの定義（JSON Schema形式）
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_user_age",
+            "description": "データベースからユーザーの年齢を取得するツール",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "description": "ユーザー名。必ず文字列で指定してください（例: 'alice'）"
+                    }
+                },
+                "required": ["username"] # 必須引数の指定
+            }
+        }
+    }
+]
+
+# APIを呼び出すとき、この tools リストを引数に渡す！
+response = await client.chat.completions.create(
+    model="qwen2.5:3b",
+    messages=[{"role": "user", "content": "Aliceの年齢を教えて"}],
+    tools=tools, # 👈 ここでスキーマを渡す！
+    tool_choice="auto"
+)
+```
+
+---
+
+### 2. 【LLMの出力】返ってくる `tool_calls` の中身
+LLMは「会話を返すのではなく、`fetch_user_age` を呼び出す場面である」と判断すると、通常のテキスト（`content`）は `null` になり、代わりに **`tool_calls`** という構造化データを出力します。
+
+実際にLLMから返ってくるレスポンスデータのイメージは以下の通りです：
+
+```json
+{
+  "role": "assistant",
+  "content": null,
+  "tool_calls": [
+    {
+      "id": "call_abc123xyz",
+      "type": "function",
+      "function": {
+        "name": "fetch_user_age",
+        "arguments": "{\"username\": \"Alice\"}"
+      }
+    }
+  ]
+}
+```
+
+正規表現によるテキストパースをしなくても、最初から **`name`（関数名）** と **`arguments`（引数のJSON文字列）** が構造化された状態で格納されています。
+
+---
+
+### 3. 【SDKによるパース】Python側の受け取りと実行
+OpenAIのSDK（ライブラリ）を利用すると、このJSONレスポンスをPythonのオブジェクトに自動マッピングします。
+そのため、プログラム側では正規表現を用いることなく、型安全に関数を実行可能です。
+
+```python
+# 1. レスポンスからメッセージを取り出す
+message = response.choices[0].message
+
+# 2. LLMが「ツールを使いたい」と言っているか（tool_callsがあるか）確認
+if message.tool_calls:
+    for tool_call in message.tool_calls:
+        # 3. SDKがパースしてくれているので、ドット記述法で直接抜き出せる！
+        tool_name = tool_call.function.name          # -> "fetch_user_age"
+        tool_args = json.loads(tool_call.function.arguments)  # -> {"username": "Alice"}
+        
+        # 4. 一致する関数を呼び出す
+        if tool_name == "fetch_user_age":
+            # 引数を取り出して、実際のPython関数を実行！
+            result = fetch_user_age(tool_args["username"])
+            
+            # 結果: 28 
+            print(f"関数の実行結果: {result}") 
+```
+
+---
+
+### 💡 設計アプローチによるフォーマット堅牢性の違い
+
+* **プロンプトベース（ReAct）:**
+  LLMが出力形式の指示を逸脱した場合（例: JSONのカンマ欠落、フォーマット文字列の誤記）、正規表現パターンマッチが失敗し、パースエラーでシステムがクラッシュするリスクが高くなります。そのため、例外発生時のフォールバック処理や自己修復ループの実装が不可欠です。
+* **APIネイティブ（Tool Calling）:**
+  モデル自体が「JSON Schemaに準拠した構造化データを出力する」ように微調整（アライメント）されているため、出力フォーマットの崩れ（ハルシネーション）が起きる確率が劇的に下がります。
+
+実務の開発においては、これらの特徴を理解した上で、利用モデルの規模（軽量ローカルモデルか、商用APIか）や要件に応じて「ReAct（モデル非依存）」と「Tool Calling（高堅牢性）」を適切に選択する設計判断が求められます。
