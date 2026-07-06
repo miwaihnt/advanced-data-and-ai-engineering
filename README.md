@@ -1,7 +1,7 @@
 # 💻 Advanced Data & AI Engineering Lab
 
 本リポジトリは、本番環境（Production-grade）におけるデータエンジニアリングおよびLLMエージェントシステムの実装パターンを検証するための技術ラボです。
-外資テック（OpenAI, Anthropic, Databricks, Palantir等）のシニアDE/FDE/Solutions Architect職の選考を想定し、高度な計算量最適化、並行処理、耐障害性の設計パターンを網羅しています。
+大規模データ統合パイプラインや自律エージェントの設計における、高度な計算量最適化、非同期並行処理、および耐障害性の設計パターンを網羅しています。
 
 ---
 
