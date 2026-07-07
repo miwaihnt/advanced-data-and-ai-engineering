@@ -2,6 +2,7 @@ import re
 import json
 import logging
 import asyncio
+import operator
 from typing import Any, Dict, List, Optional, Tuple
 from openai import AsyncOpenAI
 
@@ -39,15 +40,19 @@ def fetch_user_age(username: str) -> int:
 
 def calculate(op: str, val1: float, val2: float) -> float:
     """計算機ツール (op: '+', '-', '*', '/')"""
-    if op not in ["+", "-", "*", "/"]:
-        raise ValueError(f"Unsupported operator: {op}")
-    if op == "/" and val2 == 0:
-        raise ZeroDivisionError("Division by zero is not allowed.")
+    ops = {
+        "+": operator.add,
+        "-": operator.sub,
+        "*": operator.mul,
+        "/": operator.truediv
+    }
     
-    if op == "+": return val1 + val2
-    if op == "-": return val1 - val2
-    if op == "*": return val1 * val2
-    if op == "/": return val1 / val2
+    if op not in ops:
+        raise ValueError(f"Unsupported operator: {op}")
+    
+    # ゼロ除算は例外（ZeroDivisionError）が発生するのをPythonに任せる（EAFPスタイル）
+    # 発生した例外は、呼び出し元の execute_tool で自動的にキャッチされる
+    return ops[op](val1, val2)
 
 
 # ==========================================
