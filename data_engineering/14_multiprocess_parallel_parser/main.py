@@ -51,9 +51,19 @@ def read_chunks(file_path: Path, chunk_size: int = 1000) -> Iterator[List[str]]:
     ファイルを一度に全件ロードせず、指定された行数(chunk_size)ずつのリストを yield するジェネレータ。
     """
     # TODO: ここにチャンク読み込みのロジックを実装しなさい。
-    # 空間計算量 O(chunk_size) を守ること。
-    yield []
+    if not file_path.exists:
+        raise FileNotFoundError
 
+    chunks = []
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            chunks.append(line)
+            if len(chunks) >= chunk_size:
+                yield chunks
+                chunks = []
+        
+        if chunks:
+            yield chunks
 
 # ==========================================
 # 2. 各プロセスで動くローカル集計関数 (Mapフェーズ)
@@ -67,6 +77,19 @@ def parse_chunk_local(lines: List[str]) -> Dict[str, int]:
     """
     local_agg = {}
     # TODO: ここに各プロセスでのローカルパース・集計ロジックを実装しなさい。
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            json_line = json.loads(line)
+            if json_line["status"] == "success" and "user_id" in json_line and "amount" in json_line:
+                uid = json_line["user_id"]
+                amount = json_line["amount"]
+                local_agg[uid] = local_agg.get(uid, 0) + amount            
+        except json.JSONDecodeError as je:
+            pass
+        except Exception as e:
+            pass
     return local_agg
 
 
@@ -86,6 +109,14 @@ def parallel_parse_and_aggregate(
 
     # TODO: ここに ProcessPoolExecutor を用いた並列処理と、結果の集約ロジックを実装しなさい。
     # ヒープメモリを圧迫しないよう、Executorの futres の管理にも配慮すること。
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        chunks = read_chunks(file_path, chunk_size)
+        results = executor.map(parse_chunk_local, chunks)
+
+        for local_result in results:
+            print(local_result)
+            for user_id, amount in local_result.items():
+                master_agg[user_id] = master_agg.get(user_id, 0) + amount
 
     return master_agg
 

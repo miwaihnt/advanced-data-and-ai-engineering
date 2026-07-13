@@ -1,8 +1,10 @@
+import re
 import asyncio
 import math
 import time
 import logging
-from typing import Any, Dict, List, Tuple
+from openai import AsyncOpenAI
+from typing import List, Tuple
 
 # =========
 # logging設定
@@ -15,38 +17,44 @@ logger = logging.getLogger("SemanticRAG")
 
 
 # ==========================================
-# Mock Embedding API (書き換えないでください)
+# Ollama Embedding API（nomic-embed-text）
+#
+# 【mock_embedding_api からの変更点】
+# - モックの3次元決め打ちベクトル → Ollama の本物の768次元ベクトル
+# - 課題21の qwen2.5:3b と同じく AsyncOpenAI で base_url を Ollama に向ける
+# - /v1/embeddings（OpenAI互換エンドポイント）を使うため、書き方が統一できる
+#
+# 事前準備:
+#   ollama pull nomic-embed-text
 # ==========================================
-async def mock_embedding_api(text: str) -> Tuple[List[float], int]:
+
+# 課題21と同じパターン：base_url を Ollama に向けた AsyncOpenAI クライアント
+client = AsyncOpenAI(
+    base_url="http://localhost:11434/v1",
+    api_key="ollama"  # Ollama 用のダミーキー
+)
+
+
+async def ollama_embedding_api(text: str) -> Tuple[List[float], int]:
     """
-    疑似ベクトルと消費トークン数を返す模擬Embedding API。
-    I/O遅延として 50ms 待機する。
+    Ollama の nomic-embed-text モデルを使ってテキストをベクトル化する。
+    モックと同じシグネチャ（text -> (vector, token_count)）を維持しているため、
+    呼び出し元のコードは一切変更不要。
     """
-    await asyncio.sleep(0.05)
-    
-    # 簡易トークンカウント（文字数に基づく概算）
+    response = await client.embeddings.create(
+        model="nomic-embed-text",
+        input=text
+    )
+    vector = response.data[0].embedding   # 768次元のfloatリスト
+
+    # Ollama embedding API はトークン数を返さないため、モック同様の概算を使う
     token_count = max(5, math.ceil(len(text) / 4))
-
-    # テキストの意味に応じた3次元の疑似ベクトルを生成
-    text_lower = text.lower()
-    if "apple" in text_lower or "fruit" in text_lower or "clara" in text_lower:
-        # 果物系
-        vector = [0.95, 0.10, 0.05]
-    elif "train" in text_lower or "speed" in text_lower or "station" in text_lower:
-        # 移動・交通系
-        vector = [0.05, 0.90, 0.15]
-    elif "database" in text_lower or "crashed" in text_lower or "server" in text_lower:
-        # IT・インフラ系
-        vector = [0.10, 0.20, 0.85]
-    else:
-        # 一般
-        vector = [0.50, 0.50, 0.50]
-
     return vector, token_count
 
 
 # ==========================================
 # ヘルパー関数: コサイン類似度計算
+# （モックの3次元→本物の768次元でも zip ベースの計算は変更不要）
 # ==========================================
 def calculate_cosine_similarity(v1: List[float], v2: List[float]) -> float:
     """
@@ -61,55 +69,99 @@ def calculate_cosine_similarity(v1: List[float], v2: List[float]) -> float:
 
 
 # ==========================================
-# 【課題】セマンティックRAGインジェストの実装
+# 非同期用トークンバケット・レートリミッター（変更なし）
+# ==========================================
+class AsyncTokenBucket:
+    def __init__(self, rate: float, capacity: float):
+        self.rate = rate
+        self.capacity = capacity
+        self.tokens = capacity
+        self.last_update = time.time()
+        self.lock = asyncio.Lock()
+
+    async def consume(self, amount: float) -> None:
+        async with self.lock:
+            while True:
+                now = time.time()
+                elapsed = now - self.last_update
+                self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+                self.last_update = now
+
+                if self.tokens >= amount:
+                    self.tokens -= amount
+                    return
+
+                needed = amount - self.tokens
+                sleep_time = needed / self.rate
+                logger.warning(
+                    f"[Rate Limit] トークンが不足しています (保有: {self.tokens:.1f}, 要求: {amount}). "
+                    f"{sleep_time:.2f}秒待機します..."
+                )
+                await asyncio.sleep(sleep_time)
+
+
+# ==========================================
+# セマンティックRAGインジェスト（Ollama版）
+# mock_embedding_api → ollama_embedding_api に差し替えただけ
 # ==========================================
 class SemanticRAGPipeline:
     def __init__(self, max_tpm: int, similarity_threshold: float = 0.7):
-        """
-        Args:
-            max_tpm (int): 1分間(60秒)に送信できる最大トークン数(Tokens Per Minute)。
-            similarity_threshold (float): これを下回った場合にチャンクを分割するしきい値。
-        """
         self.max_tpm = max_tpm
         self.similarity_threshold = similarity_threshold
 
     def split_into_sentences(self, text: str) -> List[str]:
-        """
-        入力テキストを「。」または「.」で文章（文）に分解する。
-        （末尾の空文字や空白はトリムして除外すること）。
-        """
-        # TODO: 文境界の分割処理を実装しなさい。
-        pass
+        raw_sentences = re.split(r'[。.]', text)
+        return [s.strip() for s in raw_sentences if s.strip()]
 
     async def get_semantic_chunks(self, text: str) -> List[str]:
-        """
-        入力テキストを文に分解し、隣り合う文どうしのコサイン類似度を計算して
-        しきい値未満となった境界でテキストを結合した「チャンクのリスト」を生成する。
-        
-        【重要】文ごとのベクトル取得も、並行して mock_embedding_api を叩くのが望ましい。
-        """
-        # TODO: コサイン類似度を用いたセマンティック分割ロジックを実装しなさい。
-        pass
+        sentences = self.split_into_sentences(text)
+        if not sentences:
+            return []
+        if len(sentences) == 1:
+            return sentences
+
+        # 各文のベクトルを並行取得（mock → ollama に差し替え）
+        tasks = [ollama_embedding_api(s) for s in sentences]
+        results = await asyncio.gather(*tasks)
+        vectors = [vector for vector, _ in results]
+
+        chunks = []
+        current_chunk = [sentences[0]]
+
+        for i in range(len(sentences) - 1):
+            sim = calculate_cosine_similarity(vectors[i], vectors[i + 1])
+            logger.info(f"文類似度比較: '{sentences[i][:20]}...' vs '{sentences[i+1][:20]}...' = {sim:.4f}")
+
+            if sim < self.similarity_threshold:
+                chunks.append(". ".join(current_chunk) + ".")
+                current_chunk = [sentences[i + 1]]
+            else:
+                current_chunk.append(sentences[i + 1])
+
+        if current_chunk:
+            chunks.append(". ".join(current_chunk) + ".")
+
+        return chunks
 
     async def generate_embeddings_with_rate_limit(self, chunks: List[str]) -> List[Tuple[str, List[float]]]:
-        """
-        チャンクのリストを受け取り、非同期・並行で `mock_embedding_api` を叩いて
-        (チャンクテキスト, ベクトル) のタプルのリストを返す。
-        
-        【レートリミット制約】
-        - 1分間（60秒）の累積トークン数が `self.max_tpm` を超えないよう、
-          送信前に累積トークンを監視し、トークン枠が空くまで非同期で待機（sleep）させなさい。
-          （ヒント: トークン補充の計算は前回のアクセス時間からの経過秒数を用いてLazyに行うのが効率的です。）
-        """
-        # TODO: TPM制御付きの並行埋め込み生成ロジックを実装しなさい。
-        pass
+        rate_per_sec = self.max_tpm / 60.0
+        bucket = AsyncTokenBucket(rate=rate_per_sec, capacity=self.max_tpm)
+
+        async def process_chunk(chunk: str) -> Tuple[str, List[float]]:
+            estimated_tokens = max(5, math.ceil(len(chunk) / 4))
+            await bucket.consume(estimated_tokens)
+            # mock → ollama に差し替え
+            vector, _ = await ollama_embedding_api(chunk)
+            return chunk, vector
+
+        tasks = [process_chunk(chunk) for chunk in chunks]
+        return await asyncio.gather(*tasks)
 
 
 # =========
 # main
 # =========
 async def main():
-    # 途中でトピックが「果物」から「列車（交通）」、「ITサーバー」へ劇的に遷移する長文テキスト
     document = (
         "Alice has 3 apples. Bob has 2 times as many apples as Alice. "
         "Clara has 4 more apples than Bob and loves eating fresh fruit. "
@@ -120,27 +172,31 @@ async def main():
         "I need to restore the PostgreSQL backups from the remote storage site."
     )
 
-    logger.info("Semantic RAG Pipelineを開始します...")
-    
-    # テスト用に非常に小さな TPM（50トークン/分）を設定し、レート制限がかかり待機が発生することを確認する
-    pipeline = SemanticRAGPipeline(max_tpm=50, similarity_threshold=0.7)
+    logger.info("Semantic RAG Pipeline（Ollama版）を開始します...")
+    logger.info("※ 事前に `ollama pull nomic-embed-text` が必要です")
 
-    # 1. セマンティック・チャンキングの実行
+    # TPM を大きめに設定（ローカルモデルなので課金制限がない）
+    pipeline = SemanticRAGPipeline(max_tpm=10000, similarity_threshold=0.7)
+
+    # 1. セマンティック・チャンキング
+    logger.info("\n--- チャンキング開始 ---")
     chunks = await pipeline.get_semantic_chunks(document)
     print("\n--- ✂️ 生成されたセマンティック・チャンク ---")
     for i, chunk in enumerate(chunks, 1):
         print(f"Chunk {i}: {chunk}")
 
     # 2. レート制限付き並行埋め込み生成
+    logger.info("\n--- 埋め込み生成開始 ---")
     start_time = time.time()
     embeddings = await pipeline.generate_embeddings_with_rate_limit(chunks)
     elapsed = time.time() - start_time
 
     print("\n--- 🔑 埋め込み生成結果 ---")
     for i, (chunk, vector) in enumerate(embeddings, 1):
-        print(f"Embedding {i}: {chunk[:30]}... -> Vector: {vector}")
+        # 768次元なので最初の5次元だけ表示
+        print(f"Embedding {i}: {chunk[:40]}... -> Vector[:5]: {[round(v, 4) for v in vector[:5]]}")
 
-    print(f"\n総処理時間: {elapsed:.2f} 秒 (TPM制限によるスリープを含む)")
+    print(f"\n総処理時間: {elapsed:.2f} 秒")
 
 
 if __name__ == "__main__":
