@@ -140,6 +140,17 @@ def ingest_raw_llm_outputs(
             })
         except ValidationError as e:
             # Pydantic v2 の検証エラーメッセージを綺麗にフォーマット
+            # ※ e.errors() は以下のような辞書のリストを返すわ：
+            # [
+            #   {
+            #     "type": "value_error",       # エラーの種類
+            #     "loc": ("transaction_id",),  # エラー箇所のパス（タプル型。ネストしていれば複数の要素が入る）
+            #     "msg": "Value error...",     # エラーメッセージ（文字列）
+            #     "input": "invalid_id",       # 実際に渡された不正な入力値
+            #     "ctx": {...},                # エラーの詳細コンテキスト（任意）
+            #     "url": "https://..."         # エラーに関するドキュメントURL
+            #   }
+            # ]
             error_msgs = []
             for err in e.errors():
                 loc = ".".join(str(x) for x in err["loc"])
