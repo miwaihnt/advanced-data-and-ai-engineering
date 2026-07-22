@@ -1,6 +1,5 @@
 
 課題20：LRUキャッシュ（Least Recently Used Cache）のスクラッチ実装
-【頻出企業】Google (DE/SWE), Meta, Amazon
 
 ### 【ユースケースとシステム背景】
 あんたはリアルタイムデータ処理基盤のシニアエンジニアです。

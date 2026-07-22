@@ -1,7 +1,5 @@
 # 💻 課題25：FastAPI + Asyncio Queue による非同期ログ集計API
 
-## 🏢 【頻出企業】 
-LINEヤフー, LayerX, Sansan, 各種テックスタートアップの実技試験（持ち帰り課題 / Take-home Assignment）
 
 ---
 

@@ -32,7 +32,7 @@ class UserLog:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserLog":
-        # 面接でも手抜きせず、最低限のキーチェックを実行
+        # 最低限のキーチェックを実行
         for key in ["user_id", "time"]:
             if key not in data:
                 raise ValueError(f"Missing required key: '{key}'")

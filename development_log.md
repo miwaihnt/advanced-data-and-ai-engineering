@@ -41,6 +41,11 @@
 | **26** | Ollama非同期ストリーミング・バックプレッシャー | 1回目 | ✅ 完了 | `asyncio.Queue` を用いた Producer-Consumer パターンによる流量制御とバックプレッシャーの可視化。 | DB書き込み遅延発生時にLLMのトークン受信を適切に一時停止（サスペンド）させ、メモリの過度な消費を防ぐバックプレッシャー設計。 |
 | **27** | Agentic RAG with Self-Healing（スクラッチ実装） | ー | ⏳ 未着手 | 既存フレームワークに依存せず、Pydanticバリデーション、インメモリコサイン類似度検索、エラー自己修復ループを完全にスクラッチで実装。 | LLM自己評価（confidence）の限界と客観的評価のトレードオフ、プロダクションにおけるベクトルDB（pgvector等）への拡張性、`max_retries`による無限ループ防止策。 |
 | **28** | 自律テスト・修復マルチエージェント（Micro AI Scientist） | 1回目 | ✅ 完了 | Coder, Reviewer, Tester（subprocess）が協調し、テストをパスするまでバグを自動修正する自律修復ループのスクラッチ構築。 | エージェント間の会話履歴の伝搬設計、Reviewerのプロンプトガードレールと物理的制限（ハッシュ値/AST解析）、RCE（リモートコード実行）を防ぐMicroVM等の隔離環境の必要性。 |
+| **29** | Spark SQL ウィンドウ関数による重複排除と Top-N ランキング | - | ⏳ 未着手 | - | `ROW_NUMBER / RANK / DENSE_RANK` の挙動の違い、DataFrame API と Spark SQL の相互変換、Data Skewへの対策（Salting）、Delta Lake の `MERGE INTO` との比較。 |
+| **30** | Delta Lake MERGE INTO による SCD Type 2 実装 | - | ⏳ 未着手 | - | SCD Type 1/2/3 のトレードオフ、Delta Lake の Time Travel（`VERSION AS OF`）、`OPTIMIZE` / `Z-Ordering` による大規模MERGE時のパフォーマンスチューニング。 |
+| **31** | PySpark 構造化ストリーミング with ウォーターマーク（遅延データ対応） | - | ⏳ 未着手 | - | event_time と processing_time の違い、Watermark による State Store のメモリ管理、`append / update / complete` の各 outputMode の制約、本番環境でのチェックポインティング設計。 |
+| **32** | PySparkにおけるNULL処理と複合データ型（JSON・Array）の展開 | - | ⏳ 未着手 | - | `coalesce` による第一非NULL選択と `fillna / dropna` の使い分け、`from_json` と `explode / explode_outer` によるネストJSONのパースと配列のフラット化、データ爆発（Data Explosion）のリスク管理。 |
+| **33** | SparkにおけるJoin最適化（Broadcast Join）とPivot（縦横変換） | - | ⏳ 未着手 | - | Broadcast Hash Join (BHJ) の動作原理とメモリ上限（OOMリスク）、Shuffle の回避設計、`groupBy + pivot` によるクロス集計と `Left Semi / Anti Join` のユースケース。 |
 
 ---
 

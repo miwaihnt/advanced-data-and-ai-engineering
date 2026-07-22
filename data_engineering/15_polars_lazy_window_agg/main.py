@@ -2,7 +2,7 @@ import os
 import time
 import logging
 from pathlib import Path
-# ※ Polarsライブラリが必要です。面接や動作テストの前にインポート可能か確認しなさい。
+# ※ Polarsライブラリが必要です。動作テストの前にインポート可能か確認してください。
 import polars as pl
 
 # =========

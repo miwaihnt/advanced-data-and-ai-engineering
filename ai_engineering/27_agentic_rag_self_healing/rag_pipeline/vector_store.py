@@ -15,7 +15,7 @@ class InMemoryVectorStore:
     
     LangChainやChromaDBを使わず、スクラッチでコサイン類似度検索を実装することで、
     「ベクトル検索の本質（内積計算）」を理解し、
-    どのベクトルDBを採用するかの技術選定根拠を語れるようにする。
+    本プロダクション実装における最適なベクトルストア選定根拠を整理すること。
     """
 
     def __init__(self, client: AsyncOpenAI, embed_model: str):

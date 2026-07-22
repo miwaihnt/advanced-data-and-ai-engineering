@@ -1,6 +1,5 @@
 
 課題19：重複する時間区間のマージ（Interval Merging）
-【頻出企業】Google (DE/SWE), Databricks, Meta
 
 ### 【ユースケースとシステム背景】
 あんたはデータ基盤チームのシニアエンジニアです。
